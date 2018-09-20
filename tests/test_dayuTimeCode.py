@@ -275,6 +275,7 @@ class TestDayuTimeCode(TestCase):
         self.assertAlmostEqual(float(DayuTimeCode(1)), 1)
         self.assertAlmostEqual(float(DayuTimeCode('00:00:00:00')), 0)
         self.assertAlmostEqual(float(DayuTimeCode('23:59:59:23')), 2073599)
+        self.assertAlmostEqual(float(DayuTimeCode('00:00:00:02')), 2)
 
     def test___add__(self):
         self.assertAlmostEqual(DayuTimeCode(0) + DayuTimeCode(1), 1)
