@@ -5,9 +5,10 @@ __author__ = 'andyguo'
 
 from fractions import Fraction
 from config import *
-from dispath import InstanceMethodDispatch
+from dispatch import InstanceMethodDispatch
 from data_structure import SpeedMap
-from error import DayuTimeCodeValueError
+from error import DayuTimeCodeValueError, DayuTimeRangeValueError, DayuTimeRangeFpsNotIdenticalError, \
+    DayuTimeRangeOperationError, DayuTimeRangeOutOfRange
 
 
 class DayuTimeCode(object):
@@ -69,7 +70,7 @@ class DayuTimeCode(object):
     @InstanceMethodDispatch.register('__init__', Fraction)
     def _(self, fraction_value, fps=24.0):
         self.fps = float(fps)
-        self.time = fraction_value
+        self.time = Fraction(fraction_value.numerator, fraction_value.denominator)
 
     @InstanceMethodDispatch.register('__init__', tuple)
     def _(self, tuple_value, fps=24.0):
@@ -132,24 +133,30 @@ class DayuTimeCode(object):
 
     def _convert_to_SMPTE_TIMECODE_DF(self):
         sign, hh, mm, ss, ff = self.__get_hhmmssff()
-        return '{:02d}:{:02d}:{:02d};{:02d}'.format(hh, mm, ss, int(round(ff * self.fps, 0)))
+        return '{}{:02d}:{:02d}:{:02d};{:02d}'.format('' if sign > 0 else '-',
+                                                      hh, mm, ss, int(round(ff * self.fps, 0)))
 
     def _convert_to_SRT_TIMECODE(self):
         sign, hh, mm, ss, ff = self.__get_hhmmssff()
-        return '{:02d}:{:02d}:{:02d},{:03d}'.format(hh, mm, ss, int(round(ff * 1000.0, 0)))
+        return '{}{:02d}:{:02d}:{:02d},{:03d}'.format('' if sign > 0 else '-',
+                                                      hh, mm, ss, int(round(ff * 1000.0, 0)))
 
     def _convert_to_DLP_TIMECODE(self):
         sign, hh, mm, ss, ff = self.__get_hhmmssff()
-        return '{:02d}:{:02d}:{:02d}:{:03d}'.format(hh, mm, ss, int(round(ff * 250.0, 0)))
+        return '{}{:02d}:{:02d}:{:02d}:{:03d}'.format('' if sign > 0 else '-',
+                                                      hh, mm, ss, int(round(ff * 250.0, 0)))
 
     def _convert_to_FFMPEG_TIMECODE(self):
         sign, hh, mm, ss, ff = self.__get_hhmmssff()
-        return '{:02d}:{:02d}:{:02d}.{:02d}'.format(hh, mm, ss, int(round(ff * 100.0, 0)))
+        return '{}{:02d}:{:02d}:{:02d}.{:02d}'.format('' if sign > 0 else '-',
+                                                      hh, mm, ss, int(round(ff * 100.0, 0)))
 
     def _convert_to_FCPX_TIMECODE(self):
-        return '{numerator}{denominator}s'.format(numerator=self.time.numerator,
-                                                  denominator='' if float(self.time).is_integer() else '/{}'.format(
-                                                          self.time.denominator))
+        return '{sign}{numerator}{denominator}s'.format(sign='' if self.time >= 0 else '-',
+                                                        numerator=self.time.numerator,
+                                                        denominator='' if float(
+                                                                self.time).is_integer() else '/{}'.format(
+                                                                self.time.denominator))
 
     def timecode(self, type='SMPTE_TIMECODE_NDF'):
         func = getattr(self, '_convert_to_{}'.format(type), None)
@@ -232,7 +239,7 @@ class DayuTimeCode(object):
         return round(self.time * self.fps, 7) >= other
 
     def __float__(self):
-        return float(self.time * self.fps)
+        return round(float(self.time * self.fps), 7)
 
     def __int__(self):
         return int(self.time * self.fps)
@@ -249,3 +256,230 @@ class DayuTimeCode(object):
         :return: Timecode 对象，变速后的Timecode
         '''
         return DayuTimeCode(point + (self - point) / float(retime), fps=self.fps)
+
+
+class DayuTimeRange(object):
+    '''
+       TimeRange 是由start、end 两个Timecode 对象组成的，用来表示一段时间范围。
+       这里TimeRange 的逻辑是表示的两个Timecode 瞬间，他们之间的时长。
+       例如 (00:00:00:00, 00:00:00:01)，表示的0 的瞬间与1 的瞬间之间的时间长度，也就是1帧。
+       （我们不使用那种timecode 自身带有一格长度的表示形式，如果采用这种逻辑，那么（00:00:00:00, 00:00:00:00）其实是有一格的时长）
+    '''
+
+    def __new__(cls, start_tc, end_tc):
+        return super(DayuTimeRange, cls).__new__(cls, start_tc, end_tc)
+
+    def __init__(self, start_tc, end_tc):
+        if not (isinstance(start_tc, DayuTimeCode) and isinstance(end_tc, DayuTimeCode)):
+            raise DayuTimeRangeValueError
+
+        if start_tc.fps != end_tc.fps:
+            raise DayuTimeRangeFpsNotIdenticalError
+
+        self.start = DayuTimeCode(min(start_tc, end_tc).time, start_tc.fps)
+        self.end = DayuTimeCode(max(start_tc, end_tc).time, start_tc.fps)
+        self.fps = start_tc.fps
+
+    @property
+    def duration(self):
+        return self.end - self.start
+
+    def __contains__(self, item):
+        if isinstance(item, DayuTimeCode):
+            return self.start <= item <= self.end
+        if isinstance(item, DayuTimeRange):
+            return self.start <= item.start <= self.end and \
+                   self.start <= item.end <= self.end
+        try:
+            return self.start <= item <= self.end
+        except:
+            raise DayuTimeRangeOperationError
+
+    def __and__(self, other):
+        if isinstance(other, DayuTimeRange):
+            if other.end <= self.start or other.start >= self.end:
+                return None
+            time_order = sorted([self.start, self.end, other.start, other.end])
+            return DayuTimeRange(time_order[1], time_order[2])
+        raise DayuTimeRangeOperationError
+
+    def __iand__(self, other):
+        if isinstance(other, DayuTimeRange):
+            if other.end <= self.start or other.start >= self.end:
+                return None
+            time_order = sorted([self.start, self.end, other.start, other.end])
+            self.start = time_order[1]
+            self.end = time_order[2]
+            return self
+        raise DayuTimeRangeOperationError
+
+    def __or__(self, other):
+        if isinstance(other, DayuTimeRange):
+            time_order = sorted([self.start, self.end, other.start, other.end])
+            return DayuTimeRange(time_order[0], time_order[3])
+        raise DayuTimeRangeOperationError
+
+    def __ior__(self, other):
+        if isinstance(other, DayuTimeRange):
+            time_order = sorted([self.start, self.end, other.start, other.end])
+            self.start = time_order[0]
+            self.end = time_order[3]
+            return self
+        raise DayuTimeRangeOperationError
+
+    def __xor__(self, other):
+        if isinstance(other, DayuTimeRange):
+            time_order = sorted([self.start, self.end, other.start, other.end])
+            return DayuTimeRange(time_order[0], time_order[1]), DayuTimeRange(time_order[2], time_order[3])
+        raise DayuTimeRangeOperationError
+
+    def __add__(self, other):
+        try:
+            return DayuTimeRange(self.start + other, self.end + other)
+        except:
+            raise DayuTimeRangeOperationError
+
+    def __iadd__(self, other):
+        try:
+            self.start += other
+            self.end += other
+            return self
+        except:
+            raise DayuTimeRangeOperationError
+
+    def __radd__(self, other):
+        return self.__add__(other)
+
+    def __sub__(self, other):
+        try:
+            return DayuTimeRange(self.start - other, self.end - other)
+        except:
+            raise DayuTimeRangeOperationError
+
+    def __isub__(self, other):
+        try:
+            self.start -= other
+            self.end -= other
+            return self
+        except:
+            raise DayuTimeRangeOperationError
+
+    def __rsub__(self, other):
+        return self.__sub__(other)
+
+    def __mul__(self, other):
+        try:
+            return DayuTimeRange(self.start, self.start + self.duration * other)
+        except:
+            raise DayuTimeRangeOperationError
+
+    def __imul__(self, other):
+        try:
+            self.end = self.start + self.duration * other
+            return self
+        except:
+            raise DayuTimeRangeOperationError
+
+    def __rmul__(self, other):
+        return self.__mul__(other)
+
+    def __div__(self, other):
+        if other == 0:
+            raise ZeroDivisionError
+        try:
+            return DayuTimeRange(self.start, self.start + self.duration / other)
+        except:
+            raise DayuTimeRangeOperationError
+
+    def __idiv__(self, other):
+        if other == 0:
+            raise ZeroDivisionError
+        try:
+            self.end = self.start + self.duration / other
+            return self
+        except:
+            raise DayuTimeRangeOperationError
+
+    def __rdiv__(self, other):
+        return self.__div__(other)
+
+    def __lshift__(self, other):
+        try:
+            return DayuTimeRange(min(self.start - other, self.end), self.end)
+        except:
+            raise DayuTimeRangeOperationError
+
+    def __ilshift__(self, other):
+        try:
+            self.start -= other
+            self.start = min(self.start, self.end)
+            return self
+        except:
+            raise DayuTimeRangeOperationError
+
+    def __rshift__(self, other):
+        try:
+            return DayuTimeRange(self.start, max(self.start, self.end + other))
+        except:
+            raise DayuTimeRangeOperationError
+
+    def __irshift__(self, other):
+        try:
+            self.end += other
+            self.end = max(self.start, self.end)
+            return self
+        except:
+            raise DayuTimeRangeOperationError
+
+    def __nonzero__(self):
+        if self.duration > 0:
+            return True
+        return False
+
+    def __len__(self):
+        return float(self.end - self.start)
+
+    def __iter__(self):
+        tc = DayuTimeCode(self.start.time, self.fps)
+        while tc < self.end - 0.01:
+            yield DayuTimeCode(tc.time, tc.fps)
+            tc += 1
+
+    def cut(self, tc):
+        if self.start < tc < self.end:
+            return [DayuTimeRange(self.start, tc), DayuTimeRange(tc, self.end)]
+        else:
+            return [self]
+
+    def handle(self, head, tail=None):
+        tail = tail if tail else head
+        self.start -= head
+        self.end += tail
+        if self.start >= self.end:
+            raise DayuTimeRangeOutOfRange
+
+    def __repr__(self):
+        return '<TimeRange>({}|{}, {}|{}, {})'.format(self.start.timecode(),
+                                                      self.start.frame(),
+                                                      self.end.timecode(),
+                                                      self.end.frame(),
+                                                      len(self))
+
+    def __eq__(self, other):
+        if isinstance(other, DayuTimeRange):
+            return self.start == other.start and self.end == other.end
+        raise DayuTimeRangeOperationError
+
+
+if __name__ == '__main__':
+    aa = DayuTimeRange(DayuTimeCode(120), DayuTimeCode(122))
+    bb = DayuTimeRange(DayuTimeCode(20), DayuTimeCode(125))
+    pt = DayuTimeCode(150)
+    # print aa.duration.frame()
+    print aa
+    # aa <<= 3
+    # aa >>= 12
+
+    aa.handle(3, 12)
+
+    print aa
