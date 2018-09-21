@@ -85,7 +85,7 @@ print len(time_range)  # 获得 frame 长度的另一种方法
 print time_range + 10  # 表示整个time_range 向右移动 10 frame
 print time_range - 20  # 表示整个time_range 向左移动 20 frame
 print time_range * 2  # 表示整个time_range 起点不动，长度变成原来的 2 倍
-print time_range - 20  # 表示整个time_range 向左移动 20 frame
+print time_range / 3  # 表示整个time_range 起点不动，长度变成原来的 三分之一
 
 # 处理handle
 time_range.handle(10, 10)  # 表示time_range 的start 向左增加 10 frame，end 向右增加 10 frame
