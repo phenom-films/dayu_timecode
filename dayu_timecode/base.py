@@ -212,7 +212,7 @@ class DayuTimeCode(object):
 
     def __eq__(self, other):
         if isinstance(other, DayuTimeCode):
-            return self.time == other.time
+            return round(float(self.time - other.time), 7) == 0
         return round(self.time * self.fps, 7) == other
 
     def __ne__(self, other):
@@ -220,7 +220,7 @@ class DayuTimeCode(object):
 
     def __lt__(self, other):
         if isinstance(other, DayuTimeCode):
-            return self.time < other.time
+            return round(self.time, 7) < round(other.time, 7)
         return round(self.time * self.fps, 7) < other
 
     def __gt__(self, other):
@@ -276,6 +276,9 @@ class DayuTimeRange(object):
         if start_tc.fps != end_tc.fps:
             raise DayuTimeRangeFpsNotIdenticalError
 
+        if start_tc == end_tc:
+            raise DayuTimeRangeOutOfRange
+
         self.start = DayuTimeCode(min(start_tc, end_tc).time, start_tc.fps)
         self.end = DayuTimeCode(max(start_tc, end_tc).time, start_tc.fps)
         self.fps = start_tc.fps
@@ -303,34 +306,18 @@ class DayuTimeRange(object):
             return DayuTimeRange(time_order[1], time_order[2])
         raise DayuTimeRangeOperationError
 
-    def __iand__(self, other):
-        if isinstance(other, DayuTimeRange):
-            if other.end <= self.start or other.start >= self.end:
-                return None
-            time_order = sorted([self.start, self.end, other.start, other.end])
-            self.start = time_order[1]
-            self.end = time_order[2]
-            return self
-        raise DayuTimeRangeOperationError
-
     def __or__(self, other):
         if isinstance(other, DayuTimeRange):
             time_order = sorted([self.start, self.end, other.start, other.end])
             return DayuTimeRange(time_order[0], time_order[3])
         raise DayuTimeRangeOperationError
 
-    def __ior__(self, other):
-        if isinstance(other, DayuTimeRange):
-            time_order = sorted([self.start, self.end, other.start, other.end])
-            self.start = time_order[0]
-            self.end = time_order[3]
-            return self
-        raise DayuTimeRangeOperationError
-
     def __xor__(self, other):
         if isinstance(other, DayuTimeRange):
             time_order = sorted([self.start, self.end, other.start, other.end])
-            return DayuTimeRange(time_order[0], time_order[1]), DayuTimeRange(time_order[2], time_order[3])
+            first_range = DayuTimeRange(time_order[0], time_order[1]) if time_order[0] != time_order[1] else None
+            second_range = DayuTimeRange(time_order[2], time_order[3]) if time_order[2] != time_order[3] else None
+            return first_range, second_range
         raise DayuTimeRangeOperationError
 
     def __add__(self, other):
@@ -368,14 +355,20 @@ class DayuTimeRange(object):
         return self.__sub__(other)
 
     def __mul__(self, other):
+        if round(other - 0, 7) == 0:
+            raise DayuTimeRangeOutOfRange
         try:
             return DayuTimeRange(self.start, self.start + self.duration * other)
         except:
             raise DayuTimeRangeOperationError
 
     def __imul__(self, other):
+        if round(other - 0, 7) == 0:
+            raise DayuTimeRangeOutOfRange
         try:
             self.end = self.start + self.duration * other
+            if self.start > self.end:
+                self.start, self.end = self.end, self.start
             return self
         except:
             raise DayuTimeRangeOperationError
@@ -384,18 +377,23 @@ class DayuTimeRange(object):
         return self.__mul__(other)
 
     def __div__(self, other):
-        if other == 0:
+        if round(other - 0, 7) == 0:
             raise ZeroDivisionError
+
         try:
             return DayuTimeRange(self.start, self.start + self.duration / other)
+        except TypeError as e:
+            raise
         except:
             raise DayuTimeRangeOperationError
 
     def __idiv__(self, other):
-        if other == 0:
+        if round(other - 0, 7) == 0:
             raise ZeroDivisionError
         try:
             self.end = self.start + self.duration / other
+            if self.start > self.end:
+                self.start, self.end = self.end, self.start
             return self
         except:
             raise DayuTimeRangeOperationError
@@ -405,29 +403,19 @@ class DayuTimeRange(object):
 
     def __lshift__(self, other):
         try:
-            return DayuTimeRange(min(self.start - other, self.end), self.end)
-        except:
-            raise DayuTimeRangeOperationError
-
-    def __ilshift__(self, other):
-        try:
-            self.start -= other
-            self.start = min(self.start, self.end)
-            return self
+            new_start = self.start - other
+            if new_start >= self.end:
+                raise DayuTimeRangeOutOfRange
+            return DayuTimeRange(new_start, self.end)
         except:
             raise DayuTimeRangeOperationError
 
     def __rshift__(self, other):
         try:
-            return DayuTimeRange(self.start, max(self.start, self.end + other))
-        except:
-            raise DayuTimeRangeOperationError
-
-    def __irshift__(self, other):
-        try:
-            self.end += other
-            self.end = max(self.start, self.end)
-            return self
+            new_end = self.end + other
+            if new_end <= self.start:
+                raise DayuTimeRangeOutOfRange
+            return DayuTimeRange(self.start, new_end)
         except:
             raise DayuTimeRangeOperationError
 
@@ -467,7 +455,8 @@ class DayuTimeRange(object):
 
     def __eq__(self, other):
         if isinstance(other, DayuTimeRange):
-            return self.start == other.start and self.end == other.end
+            return round(float(self.start - other.start), 7) == 0 and \
+                   round(float(self.end - other.end), 7) == 0
         raise DayuTimeRangeOperationError
 
 
