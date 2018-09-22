@@ -1,6 +1,10 @@
 # dayu_timecode
 
+[![pypi](https://img.shields.io/badge/pypi-0.2-green.svg)](https://pypi.org/project/dayu-timecode/)
+[![Python](https://img.shields.io/badge/python-2.7-blue.svg)]()
 [![Build Status](https://travis-ci.org/phenom-films/dayu_timecode.svg?branch=master)](https://travis-ci.org/phenom-films/dayu_timecode)
+[![GitHub license](https://img.shields.io/github/license/phenom-films/dayu_timecode.svg)](https://github.com/phenom-films/dayu_timecode/blob/master/LICENSE)
+
 
 Timecode 的计算库。针对影视行业常见的各种timecode、frame 进行计算。有下面的特点：
 
@@ -10,6 +14,13 @@ Timecode 的计算库。针对影视行业常见的各种timecode、frame 进行
 * timecode、frame 之间自由转换
 * 支持和其他常用的数字类型进行运算，无需转换（int、float、Fraction）
 
+
+# 如何安装
+
+直接使用pip 即可安装
+```shell
+pip install -U dayu_timecode
+```
 
 # DayuTimeCode 使用简介
 
