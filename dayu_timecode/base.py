@@ -247,6 +247,11 @@ class DayuTimeCode(object):
     def __neg__(self):
         self.time = -self.time
         return self
+    
+    def __copy__(self):
+        dayu_tc = type(self)(self.frame(), fps=self.fps)
+        dayu_tc.__dict__.update(self.__dict__)
+        return dayu_tc
 
     def retime(self, point, retime):
         '''

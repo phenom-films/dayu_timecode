@@ -4,6 +4,7 @@
 __author__ = 'andyguo'
 
 from unittest import TestCase
+import copy
 from dayu_timecode.base import DayuTimeCode, Fraction
 from dayu_timecode.error import *
 from dayu_timecode.config import *
@@ -308,3 +309,13 @@ class TestDayuTimeCode(TestCase):
         self.assertEqual(DayuTimeCode(1440).retime(0, 2.0), 720)
         self.assertEqual(DayuTimeCode(1440).retime(-100, 0.5), 2980)
         self.assertEqual(DayuTimeCode(1440).retime(2880, 2), 2160)
+        
+    def test___copy__(self):
+        a = DayuTimeCode(1440, fps=25)
+        b = a
+        a.fps = 50
+        self.assertEqual(b.fps, 50)    
+        c = copy.copy(a)
+        c.fps = 25
+        self.assertNotEqual(c.fps, a.fps)
+        self.assertNotEqual(c.fps, b.fps)
